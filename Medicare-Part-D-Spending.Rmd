@@ -1,0 +1,573 @@
+---
+title: "Medicare Part D Drug Spending and the Inflation Reduction Act: Analysis of First 10 Drugs Selected for Negotiation"
+author: "Katherine Wei"
+output: html_document
+date: "November 2025"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+options(scipen = 999)
+```
+
+## Background
+
+Spending for Medicare Part D, which is an additional benefit to fee-for-service Medicare and Medicare Advantage plans that covers prescription drugs, [doubled](https://pmc.ncbi.nlm.nih.gov/articles/PMC11607209/) from 2012 to 2021, a trend driven by both an increase in prescription claims and drug prices. In 2022, the Inflation Reduction Act (IRA) was passed by the Biden Administration to lower inflation and reduce spending in healthcare and energy. Among other changes, the [IRA](https://aspe.hhs.gov/sites/default/files/documents/0328c247692c0ccfdc58519195979af2/price-change-over-time-brief.pdf) allows Medicare to negotiate the prices of high-spending, single-source Part D drugs with no bio-similars or generics. 
+
+In August 2023, the Centers for Medicare and Medicaid Services (CMS) published the list of the 10 drugs selected for negotiation, whose new prices will take effect on [January 1, 2026](https://us.pagefreezer.com/en-US/wa/browse/0a7f82bb-be6e-448a-ae11-373d22c37842?find-by-timestamp=2024-01-02T03:56:59Z&url=https:%2F%2Fwww.hhs.gov%2Fabout%2Fnews%2F2023%2F08%2F29%2Fhhs-selects-the-first-drugs-for-medicare-drug-price-negotiation.html&timestamp=2024-01-02T03:43:14Z). They include (and [treat](https://aspe.hhs.gov/sites/default/files/documents/0328c247692c0ccfdc58519195979af2/price-change-over-time-brief.pdf)):
+
+* Eliquis (blood clots)
+* Jardiance (type 2 diabetes [T2D], heart failure, chronic kidney disease)
+* Januvia (T2D)
+* Farxiga (T2D, heart failure, chronic kidney disease)
+* Xarelto (blood clots)
+* Entresto (heart failure)
+* Enbrel (rheumatoid arthritis, psoriasis, and psoriatic arthritis)
+* Imbruvica (blood cancers)
+* Stelara (plaque psoriasis, psoriatic arthritis, Crohn's disease and ulcerative colitis)
+* NovoLog/Fiasp (Type 1 and 2 diabetes)
+
+In January 2025, CMS selected [15 additional drugs](https://www.cms.gov/newsroom/press-releases/hhs-announces-15-additional-drugs-selected-medicare-drug-price-negotiations-continued-effort-lower) for negotiation, a list that notably included Ozempic, Wegovy, and Rybelsus, drugs used to treat T2D. New prices will take effect starting [January 1, 2027](https://www.kff.org/medicare/faqs-about-the-inflation-reduction-acts-medicare-drug-price-negotiation-program/?entry=table-of-contents-how-many-and-which-types-of-drugs-qualified-for-price-negotiation-for-2027).
+
+## Objective
+
+The purpose of this brief is to analyze spending trends for the first 10 drugs selected for negotiation under the IRA, whose new prices will take effect at the beginning of next year, and how those trends compare to the top-spending drugs.
+
+## Methods
+
+For this analysis, data was taken from CMS' [Medicare Part D by Drug dataset]((https://data.cms.gov/summary-statistics-on-use-and-payments/medicare-medicaid-spending-by-drug/medicare-part-d-spending-by-drug/data)) (accessed October 1, 2025), which includes gross spending data on drugs covered by Medicare Part D from 2019 to 2023, excluding rebates or manufacturer discounts. The original dataset, which contained 3,598 drugs, was aggregated to combine different formulations and dosages of drugs with the same brand name. For example, Humira includes: Humira; Humira Pen; Humira Pen Crohn'S-Uc-Hs; Humira Pen Psor-Uveits-Adol Hs; Humira(Cf); Humira(Cf) Pediatric Crohn'S; Humira(Cf) Pen; Humira(Cf) Pen Crohn'S-Uc-Hs and Humira(Cf) Pen Psor-Uv-Adol Hs. This resulted in a dataset of 2,670 unique brand drugs.
+
+The lists of drugs selected for negotiation were taken from CMS' press releases published on their website:
+
+* First cycle of negotiation: [press release](https://us.pagefreezer.com/en-US/wa/browse/0a7f82bb-be6e-448a-ae11-373d22c37842?find-by-timestamp=2024-01-02T03:56:59Z&url=https:%2F%2Fwww.hhs.gov%2Fabout%2Fnews%2F2023%2F08%2F29%2Fhhs-selects-the-first-drugs-for-medicare-drug-price-negotiation.html&timestamp=2024-01-02T03:43:14Z)
+* Second cycle of negotiation: [press release](https://www.cms.gov/newsroom/press-releases/hhs-announces-15-additional-drugs-selected-medicare-drug-price-negotiations-continued-effort-lower
+)
+
+
+Notably, KFF did an analysis in 2023 on the same Medicare Part D Drug Spending Dataset (using 2018-2021 data) before the initial list of 10 drugs was published. Their analysis can be found [here ](https://www.kff.org/medicare/a-small-number-of-drugs-account-for-a-large-share-of-medicare-part-d-spending/).
+
+
+## Results
+```{r, echo=F, message=F, warning=F}
+library(tidyverse)
+library(data.table)
+library(scales)
+library(ggrepel)
+
+#data <- read.csv("Medicare_Part_D_Prescribers_by_Provider_and_Drug_2023.csv")
+#data <- fread("Medicare_Part_D_Prescribers_by_Provider_and_Drug_2023.csv")
+data <- fread("Medicare_Part_D_Spending_by_Drug_2023.csv")
+```
+
+```{r, echo=F}
+data1 <- data %>% 
+  filter(Mftr_Name == "Overall") %>%
+  mutate(clean_name = str_extract(Brnd_Name, "^[0-9A-Za-z]+")) %>%
+  relocate(clean_name, .after = Brnd_Name)
+
+first_10_gross_spending_1 <- data1 %>% 
+  filter(Brnd_Name %in% c("Eliquis", "Jardiance", "Xarelto", "Januvia", "Farxiga", "Entresto", "Enbrel", "Imbruvica", "Stelara*")) %>%
+  mutate(Brnd_Name = str_remove(Brnd_Name,"\\*")) %>%
+  select(Brnd_Name, Tot_Spndng_2021, Tot_Spndng_2022, Tot_Spndng_2023)
+
+first_10_gross_spending_2 <- data1 %>%
+  filter((str_detect(Brnd_Name, "Fiasp|Novolog") & !str_detect(Brnd_Name, "Inpen|Pumpcart"))) %>%
+  summarise(Brnd_Name = "NovoLog/Fiasp*", 
+            Tot_Spndng_2019 = sum(Tot_Spndng_2019, na.rm = T),
+            Tot_Spndng_2020 = sum(Tot_Spndng_2020, na.rm = T),
+            Tot_Spndng_2021 = sum(Tot_Spndng_2021, na.rm = T),
+            Tot_Spndng_2022 = sum(Tot_Spndng_2022, na.rm = T),
+            Tot_Spndng_2023 = sum(Tot_Spndng_2023, na.rm = T),
+            Tot_Benes_2019 = sum(Tot_Benes_2019, na.rm = T),
+            Tot_Benes_2020 = sum(Tot_Benes_2020, na.rm = T),
+            Tot_Benes_2021 = sum(Tot_Benes_2021, na.rm = T),
+            Tot_Benes_2022 = sum(Tot_Benes_2022, na.rm = T),
+            Tot_Benes_2023 = sum(Tot_Benes_2023, na.rm = T),
+            Tot_Clms_2019 = sum(Tot_Clms_2019, na.rm = T),
+            Tot_Clms_2020 = sum(Tot_Clms_2020, na.rm = T),
+            Tot_Clms_2021 = sum(Tot_Clms_2021, na.rm = T),
+            Tot_Clms_2022 = sum(Tot_Clms_2022, na.rm = T),
+            Tot_Clms_2023 = sum(Tot_Clms_2023, na.rm = T)
+            ) 
+
+first_10_gross_spending <- bind_rows(first_10_gross_spending_1, first_10_gross_spending_2) #%>%
+  #mutate_at(vars(starts_with("Tot_Spndng")), ~ ./1000000000) %>% 
+  #mutate(Brnd_Name = fct_reorder(Brnd_Name, Tot_Spndng_2023),
+        # Label = paste0("$", round(Tot_Spndng_2023,1), "B"))
+
+data2 <- data1 %>%
+  mutate(Brnd_Name = str_remove(Brnd_Name,"\\*")) %>%
+  filter(!(str_detect(Brnd_Name, "Fiasp|Novolog") & !str_detect(Brnd_Name, "Inpen|Pumpcart"))) %>%
+  bind_rows(first_10_gross_spending_2) %>%
+  group_by(clean_name) %>%
+  summarise(Brnd_Name = first(Brnd_Name),
+            number_drugs = n(),
+            Tot_Spndng_2019 = sum(Tot_Spndng_2019, na.rm = T),
+            Tot_Spndng_2020 = sum(Tot_Spndng_2020, na.rm = T),
+            Tot_Spndng_2021 = sum(Tot_Spndng_2021, na.rm = T),
+            Tot_Spndng_2022 = sum(Tot_Spndng_2022, na.rm = T),
+            Tot_Spndng_2023 = sum(Tot_Spndng_2023, na.rm = T),
+            Tot_Benes_2019 = sum(Tot_Benes_2019, na.rm = T),
+            Tot_Benes_2020 = sum(Tot_Benes_2020, na.rm = T),
+            Tot_Benes_2021 = sum(Tot_Benes_2021, na.rm = T),
+            Tot_Benes_2022 = sum(Tot_Benes_2022, na.rm = T),
+            Tot_Benes_2023 = sum(Tot_Benes_2023, na.rm = T),
+            Tot_Clms_2019 = sum(Tot_Clms_2019, na.rm = T),
+            Tot_Clms_2020 = sum(Tot_Clms_2020, na.rm = T),
+            Tot_Clms_2021 = sum(Tot_Clms_2021, na.rm = T),
+            Tot_Clms_2022 = sum(Tot_Clms_2022, na.rm = T),
+            Tot_Clms_2023 = sum(Tot_Clms_2023, na.rm = T)
+            ) %>%
+  mutate(clean_name = ifelse(number_drugs == 1, Brnd_Name, clean_name)) %>%
+  arrange(desc(Tot_Spndng_2023)) %>%
+  mutate(row_id = row_number()) %>%
+  mutate(total_spending_2023 = cumsum(Tot_Spndng_2023)) %>%
+  mutate(negotiated_drug = ifelse(Brnd_Name %in% first_10_gross_spending$Brnd_Name, "Yes", "No")) %>%
+  rename(Negotiated = negotiated_drug)
+
+
+```
+
+```{r, echo=F}
+spending_and_share <- data2 %>% 
+  filter(row_id %in% c(10, 15, 20, 50, 100, nrow(data2))) %>%
+  bind_rows(first_10_gross_spending  %>% summarise(total_spending_2023 = sum(Tot_Spndng_2023), row_id = NA)) %>% 
+  mutate(row_label = c("Top 10", "Top 15", "Top 20", "Top 50", "Top 100", "All Part D drugs", "First 10 negotiated drugs*"),
+         row_label = factor(row_label, levels = c("Top 100", "Top 50", "Top 20", "Top 15", "Top 10", "First 10 negotiated drugs*", "All Part D drugs"))) %>%
+  select(row_label, row_id, total_spending_2023) %>%
+  mutate(share_total_spending_2023 = total_spending_2023/sum(data1$Tot_Spndng_2023),
+         total_spending_2023_bil = total_spending_2023/1000000000) %>%
+  #arrange(desc(row_label == "All Part D drugs"), row_id) %>%
+  pivot_longer(cols = c("total_spending_2023_bil", "share_total_spending_2023"),
+               names_to = "Metric", values_to = "Value") %>%
+  mutate(Label = ifelse(Metric == "total_spending_2023_bil", paste0("$", round(Value,1), "B"), paste0(round(Value*100, 0),"%")),
+         Metric = factor(Metric, levels = c("total_spending_2023_bil", "share_total_spending_2023"),
+                         labels = c("Total gross spending in 2023", "Share of total gross spending")))
+
+
+```
+
+### Negotiated drugs account for 20% of total spending, share of gross spending is concentrated in a small number of drugs
+
+In 2023, gross Part D drug spending totaled \$275.9B for 2,640 unique drugs (**Figure 1**). The negotiated drugs accounted for \$54.2B or 20% of spending in 2023. Overall, a large share of spending is concentrated in a small number of drugs: the top 100 drugs by spending accounted for over two-thirds of total Part D spending, despite making up less than 4% of all covered drugs.
+
+
+```{r, fig.width=8, fig.height=4, echo=FALSE}
+ggplot(spending_and_share, aes(x = Value, y = row_label, fill = Metric)) +
+  geom_col(position = "dodge", width = 0.6) +
+  facet_wrap(~Metric, scales = "free_x") +
+  geom_text(aes(label = Label),
+            position = position_dodge(width = 0.6),
+            hjust = 1, size = 3.5,
+            color = "white") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
+  scale_fill_manual(values = c("Total gross spending in 2023" = "#0072B2", "Share of total gross spending" = "#E69F00")) +
+  labs(x = NULL, y = NULL, title = paste(strwrap("Figure 1. Gross Spending for Negotiated and Top Drugs in 2023", width = 70), collapse = "\n"),
+       caption = "Figure adapted from KFF analysis of 2021 data.\n*Includes Eliquis, Jardiance, Xarelto, Januvia, Farxiga, Entresto, Enbrel, Imbruvica, Stelara,\n and NovoLog/Fiasp.") +
+  theme_gray(base_size = 12,
+             paper = "white") +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold"), # Labels for gross spending and share of spending
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(), 
+    panel.background = element_rect(fill = "white"),
+    plot.caption = element_text(hjust = 0, size = 9)
+    #axis.label.y = element_text(face = "bold", color = "black")
+  )
+
+
+```
+
+### Negotiated drugs are in the top 20 drugs by spending
+
+**Figure 2** shows the top 20 drugs by gross spending in 2023. Gross spending across all 20 drugs totaled $102.1B or 37% of all Part D spending. The mean average spending per beneficiary was \$6,139 and the mean average per claim was \$1,262.
+
+Among the 10 negotiated drugs, spending in 2023 ranged from \$18.3B (6.6% of total Part D spending) for Eliquist to \$2.4B (0.9%) for Imbruvica. Average spending per claim ranged from \$25,521.74 (Stelara) to $862.14 (Eliquis). Average spending per beneficiary ranged from \$138,707.21 (Imbruvica) to \$3,145.00 (Novlog/Fiasp).
+
+Eliquis stands out among the group, accounting for around twice the spending of the second-place drug, Jardiance. The high cost is attributable to the high number of beneficiaries and claims. In 2023, Medicare reimbursed Eliquis for almost 4 million beneficiaries across 21 million claims, double that of Jardiance (1.9 million and 8.2 million, respectively), and around 5 times the mean average across the top 20 drugs (831,000 and 4 million, respectively). However, average spending per beneficiary (\$4652.28) and per claim (\$862.14) were below the mean average across the top 20 drugs.
+
+On the other hand, Imbruvica only accounted for 17,000 beneficiaries across 150,000 claims; however, the average spending was \$139,000 per beneficiary (22 times the average) and \$15,200 per claim (12 times the average).
+
+```{r, echo=F}
+top_20_gross_spending <- data2 %>% 
+  filter(row_id %in% c(1:20)) %>%
+  select(Brnd_Name, Tot_Spndng_2023, Negotiated, Tot_Clms_2023, Tot_Benes_2023) %>%
+  mutate_at(vars(starts_with("Tot_Spndng")), ~ ./1000000000) %>%
+  mutate(negotiated = ifelse(Brnd_Name %in% c("Eliquis", "Jardiance", "Xarelto", "Januvia", "Farxiga", "Entresto", "Enbrel", "Imbruvica", "Stelara"), paste0(Brnd_Name, "*"), Brnd_Name),
+         #Brnd_Name = ifelse(Brnd_Name %in% c("Ozempic", "Trelegy Ellipta"), paste0(Brnd_Name, "**"), #Brnd_Name)
+         ) %>%
+    mutate(Avg_Spnding_Per_Clm_2023 = Tot_Spndng_2023*1000000000/Tot_Clms_2023,
+         Avg_Spnding_Per_Bene_2023 = Tot_Spndng_2023*1000000000/Tot_Benes_2023)
+```
+
+```{r, echo=F, fig.width=8, fig.height=4}
+top_20_gross_spending_2023 <- top_20_gross_spending %>% 
+  mutate(Brnd_Name = fct_reorder(Brnd_Name, Tot_Spndng_2023),
+         Label = paste0(round(Tot_Spndng_2023,1)))
+
+ggplot(top_20_gross_spending_2023, aes(x = Brnd_Name, y = Tot_Spndng_2023, fill = Negotiated)) +
+  geom_col(width = 0.6) +
+  labs(x = NULL, y = "Gross Spending ($B)", title = "Figure 2. First 10 Negotiated Drugs are Among Top 20 Drugs by Spending", caption = "*Aggregated for Novolog, Novolog Flexpen, Novolog Mix 70-30, Novolog Mix 70-30 Flexpen, Novolog Penfill, Fiasp, \n Fiasp Flextouch and Fiasp Penfill.") +
+  theme_minimal(base_size = 12,
+             paper = "white") +
+   scale_fill_manual(values = c("Yes" = "#E69F00", "No" = "#0072B2")) +
+  theme(
+    #legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    plot.caption = element_text(hjust = 0, size = 9)
+  ) +
+  scale_y_continuous(limits = c(0, 20), breaks = c(seq(2, 20, 2))) + 
+  geom_text(aes(label = Label),
+             position = position_dodge(width = 0.6),
+            vjust = -1, size = 3.5, color = "#777777") +
+  geom_hline(yintercept = 0, color = "black") #+
+  #scale_x_discrete(labels = label_wrap(10)) # Wraps x-axis text
+```
+
+### Negotiated drugs fall into two groups: high per-patient cost or high volume
+
+**Figure 3** plots the average gross spending per beneficiary and number of beneficiaries on a log scale for all drugs with over 10,000 beneficiaries. Overall, there is a modest negative relationship: drugs used by more beneficiaries tend to have lower average spending per patient.
+
+Compared with non-negotiated drugs, the ten drugs selected for negotiation generally have higher spending per beneficiary relative to other drugs with similar patient volumes. These negotiated drugs cluster into two groups:
+
+* High-cost, low-volume drugs such as Imbruvica, Enbrel, and Stelara, which treat relatively rare but expensive conditions (e.g., cancer, arthritis, psoriasis).
+* Lower-cost, high-volume drugs such as Eliquis, Jardiance, Januvia, Farxiga, Xarelto, Entresto, and NovoLog/Fiasp, which treat common chronic diseases like cardiovascular disease, diabetes, and kidney disease.
+
+```{r, echo=F, fig.width=8, fig.height=4, warning=F}
+all_gross_spending <- data2 %>% 
+  #slice(1:100) %>%
+  filter(Tot_Benes_2023 > 10000) %>%
+  select(Brnd_Name, Tot_Spndng_2023, Negotiated, Tot_Clms_2023, Tot_Benes_2023) %>%
+  mutate_at(vars(starts_with("Tot_Spndng")), ~ ./1000000000) %>%
+    mutate(Avg_Spnding_Per_Clm_2023 = Tot_Spndng_2023*1000000000/Tot_Clms_2023,
+         Avg_Spnding_Per_Bene_2023 = Tot_Spndng_2023*1000000000/Tot_Benes_2023,
+         Tot_Benes_2023 = Tot_Benes_2023,
+         Avg_Spnding_Per_Bene_2023 = Avg_Spnding_Per_Bene_2023)
+
+ggplot(all_gross_spending, aes(x = Tot_Benes_2023, y = Avg_Spnding_Per_Bene_2023, color = Negotiated, group = Negotiated)) +
+  scale_x_log10() + scale_y_log10() +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(aes(label = ifelse(Negotiated == "Yes", Brnd_Name, "")),
+                  nudge_x = 0.25, nudge_y = 1,
+                  size = 3, color = "#777777") +
+  # geom_text(aes(label = ifelse(Negotiated == "Yes", Brnd_Name, "")),
+  #           vjust = -1, hjust = -0.3, size = 2.5, color = "#777777") +
+  scale_color_manual(values = c("No" = "#0072B2", "Yes" = "#E69F00")) +
+  labs(x = "Number of Benes (Log Scale)", y = "Average Spending Per Bene ($) (Log Scale)", title = "Figure 3. Spending Per Beneficiary vs. Number of Beneficiaries (2023):\nNegotiated vs. Other Drugs") +
+  # scale_y_continuous(labels = scales::comma) +
+  # scale_x_continuous(labels = scales::comma) +
+  theme_minimal(base_size = 12,
+             paper = "white") +
+  theme(
+    #legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()) +
+
+  geom_hline(yintercept = 0, color = "black") #+
+  #scale_x_discrete(labels = label_wrap(10)) # Wraps x-axis text
+```
+
+
+
+### Differences in spending per beneficiary and per claim between negotiated drugs and other drugs are growing over time
+
+**Figures 4 and 5** show spending per beneficiary and per claim, respectively, from 2019-2023. During this period, average spending per beneficiary for negotiated drugs increased at a rate 10 times that of other drugs (\$210 per year vs. \$19 per year). A similar trend was observed for average spending per claim (\$55 per year vs. \$6 per year). In 2023, the average spending for negotiated drugs was $5,341 per beneficiary, over 10 times that of a non-negotiated drug. Similarly, the average spending for negotiated drugs was \$1,101 per claim, or 8 times that of a non-negotiated drug. 
+
+```{r, echo=F, fig.width=8, fig.height=4}
+trends_in_spending <- data2 %>%
+  select(-total_spending_2023, -number_drugs, -row_id) %>%
+  group_by(Negotiated) %>%
+  summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
+  pivot_longer(cols = c("Tot_Spndng_2019", "Tot_Spndng_2020", "Tot_Spndng_2021", "Tot_Spndng_2022", "Tot_Spndng_2023"),
+               names_to = "Tot_Spnding_Year", values_to = "Tot_Spnding") %>%
+  pivot_longer(cols = c("Tot_Benes_2019", "Tot_Benes_2020", "Tot_Benes_2021", "Tot_Benes_2022", "Tot_Benes_2023"),
+               names_to = "Tot_Benes_Year", values_to = "Tot_Benes") %>%
+  pivot_longer(cols = c("Tot_Clms_2019", "Tot_Clms_2020", "Tot_Clms_2021", "Tot_Clms_2022", "Tot_Clms_2023"),
+               names_to = "Tot_Clms_Year", values_to = "Tot_Clms") %>%
+  mutate(Tot_Spnding_Year = substr(Tot_Spnding_Year, 12, 16),
+         Tot_Benes_Year = substr(Tot_Benes_Year, 11, 15),
+        Tot_Clms_Year = substr(Tot_Clms_Year, 10, 14),
+         )%>%
+  filter(Tot_Spnding_Year == Tot_Benes_Year & Tot_Spnding_Year == Tot_Clms_Year) %>%
+  mutate(Avg_Spnding_Per_Clm = Tot_Spnding/Tot_Clms,
+         Avg_Spnding_Per_Bene = Tot_Spnding/Tot_Benes) %>%
+  rename(Year = Tot_Spnding_Year) %>%
+  select(-Tot_Benes_Year, -Tot_Clms_Year) %>%
+  mutate(Label_Per_Clm = paste0("$", comma(round(Avg_Spnding_Per_Clm, 0))),
+         Label_Per_Bene = paste0("$", comma(round(Avg_Spnding_Per_Bene, 0))))
+
+```
+
+```{r, echo=F, fig.width=8, fig.height=4}
+
+ggplot(trends_in_spending, aes(x = Year, y = Avg_Spnding_Per_Bene, color = Negotiated, group = Negotiated)) +
+  geom_line() +
+  geom_point() +
+  geom_text(aes(label = Label_Per_Bene),
+            vjust = -1, size = 3.5, color = "#777777") +
+  scale_color_manual(values = c("No" = "#0072B2", "Yes" = "#E69F00")) +
+  labs(x = NULL, y = "Average Gross Spending Per Bene ($)", title = "Figure 4. Spending Per Beneficiary Trends from 2019–2023:\nNegotiated vs. Other Drugs") +
+  scale_y_continuous(limits = c(0, 6000), breaks = c(seq(0, 6000, 1000))) + 
+  theme_minimal(base_size = 12,
+             paper = "white") +
+  theme(
+    #legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()) +
+
+  geom_hline(yintercept = 0, color = "black") +
+  scale_x_discrete(labels = label_wrap(10)) # Wraps x-axis text
+```
+
+```{r, echo=F, fig.width=8, fig.height=4}
+
+ggplot(trends_in_spending, aes(x = Year, y = Avg_Spnding_Per_Clm, color = Negotiated, group = Negotiated)) +
+  geom_line() +
+  geom_point() +
+  geom_text(aes(label = Label_Per_Clm),
+            vjust = -1, size = 3.5, color = "#777777")+
+  #facet_wrap(~Type, scales = "free_x") +
+  #scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
+  scale_color_manual(values = c("No" = "#0072B2", "Yes" = "#E69F00")) +
+  labs(x = NULL, y = "Average Gross Spending Per Claim ($)", title = "Figure 5. Spending Per Claim Trends from 2019–2023:\nNegotiated vs. Other Drugs") +
+  scale_y_continuous(limits = c(0, 1200), breaks = c(seq(0, 1200, 200))) + 
+  theme_minimal(base_size = 12,
+             paper = "white") +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()) +
+
+  geom_hline(yintercept = 0, color = "black") +
+  scale_x_discrete(labels = label_wrap(10)) # Wraps x-axis text
+```
+
+## Discussion
+Overall, the data shows that the top 3% of drugs account for the majority of spending on Medicare Part D drugs. Efforts to curtail spending and lower prescription drug prices should be targeted at the top-spending drugs. The impacts of the IRA will need to be evaluated after the negotiated prices on the first 10 drugs (and subsequent sets of drugs in the following years) come into effect starting next year. The initial [price discounts](https://www.cms.gov/files/document/infographic-negotiated-prices-maximum-fair-prices.pdf), which range from 38% (Imbruvica) to 79% (Januvia), will likely result in substantial cost savings. 
+
+There are some limitations to the ability for Medicare to lower costs. Many top spending drugs not on CMS' lists, including Humira, Lantus and Revlimid, are not eligible for negotiation due to availability of biosimilars or generics. This excludes a list of drugs responsible for a substantial portion of Part D spending. Additionally, the new [tax and budget reconciliation law](https://www.kff.org/medicare/people-with-medicare-will-face-higher-costs-for-some-orphan-drugs-due-to-changes-in-the-new-tax-and-budget-law/) also known as the One Big Beautiful Bill, which broadened the exclusion criteria of orphan drugs from negotiation, will result in delayed eligibility or exclusion for several high-spending drugs and is estimated to cost Medicare an additional \$5B in the next decade.
+
+
+### Limitations
+There are some limitations to this analysis including:
+
+* Data only takes into account gross spending, and does not reflect any discounts or rebates that Medicare may receive.
+* The 15 drugs approved for negotiation in the second cycle are not included. A future analysis on spending trends can look at how these 15 drugs compare to the drugs not selected for negotiation.  
+* In looking at the IRA, only Medicare Part D data was analyzed. Drugs covered under Part B are also eligible for negotiation under the new act.
+
+
+
+```{r, echo=F, fig.width=8, fig.height=4, results=F, eval=F}
+# proportion_drugs <- data1 %>% 
+#   filter(row_id %in% c(10, 15, 20, 50, 100, nrow(data1))) %>%
+#   mutate(row_label = c("Top 10", "Top 15", "Top 20", "Top 50", "Top 100", "All Part D drugs"),
+#          row_label = factor(row_label, levels = c("Top 100", "Top 50", "Top 20", "Top 15", "Top 10", "All Part D drugs")),
+#          prop_drugs = row_id/nrow(data1),
+#          share_total_spending_2023 = total_spending_2023/sum(data1$Tot_Spndng_2023)) %>%
+#   select(row_label, row_id, prop_drugs, share_total_spending_2023) %>%
+#   pivot_longer(cols = c("prop_drugs", "share_total_spending_2023"),
+#                names_to = "Metric", values_to = "Value") %>%
+#   mutate(Label = ifelse(Metric == "prop_drugs", paste0(round(Value*100, 1),"%"), paste0(round(Value*100, 0),"%")),
+#          Metric = factor(Metric, levels = c("prop_drugs", "share_total_spending_2023"),
+#                          labels = c("Share of total drugs", "Share of total gross spending"))) 
+# 
+# ggplot(proportion_drugs, aes(x = Value, y = row_label, fill = Metric)) +
+#   geom_col(position = "dodge", width = 0.6) +
+#   facet_wrap(~Metric, scales = "free_x") +
+#   geom_text(aes(label = Label),
+#             position = position_dodge(width = 0.6),
+#             hjust = -0.1, size = 3.5,
+#             color = "black") +
+#   scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
+#   scale_fill_manual(values = c("Share of total drugs" = "#0072B2", "Share of total gross spending" = "#E69F00")) +
+#   labs(x = NULL, y = NULL, title = "Figure 2. Top 3% of Drugs Made Up Over 60% of Gross Spending in 2023") +
+#   theme_gray(base_size = 12,
+#              paper = "white") +
+#   theme(
+#     legend.position = "none",
+#     strip.text = element_text(face = "bold"), # Labels for gross spending and share of spending
+#     panel.grid.major.y = element_blank(),
+#     panel.grid.major.x = element_blank(),
+#     panel.grid.minor = element_blank(),
+#     axis.text.x = element_blank(),
+#     axis.ticks.x = element_blank(), 
+#     panel.background = element_rect(fill = "white"),
+#     #axis.label.y = element_text(face = "bold", color = "black")
+#   )
+# 
+
+```
+
+```{r, echo=F, results=F}
+### List of top 10 drugs has largely stayed the same since 2021, with the largest increase in spending seen in Ozempic
+
+# In 2023, the top 10 drugs accounted for over $71B of Part D spending. Like in 2021, treatments for diabetes make up half of the top 10-selling drugs: Ozempic, Jardiance, Trulicity, Farxiga, Januvia (**Figure 3**). Overall, spending on the majority of the top 10 drugs increased since 2021, by a range of 1% to 251% (**Figure 4**).
+# 
+# * Eliquis, an anti-coagulant, remained at the top, with an increase in spending from $12.6B in 2021 to $18.3B in 2023 (45% increase).
+# * Ozempic, approved by the FDA and covered by Medicare to treat type 2 diabetes (T2D), spending rose by a staggering 251% from 2021 to 2023, moving from the 10th to the 2nd spot in the list of the top-selling Part D drugs.
+# * Farxiga, an SGLT2 inhibitor used to treat T2D, heart failure, and chronic kidney disease (T2D) and Trelegy Ellipta (chronic obstructive pulmonary disease [COPD]), replaced Lantus Solostar (diabetes) and Imbruvica (cancer) on the list. 
+# * Revlumid, a treatment for multiple myeloma by Bristol Myers Squibb, was the only drug in the Top 10 that saw a decrease in spending during this period. This is likely due to the launch of generic versions of Revlumid (lenalidomide) in [2022](https://www.fiercepharma.com/pharma/bristol-myers-squibbs-revlimid-finally-faces-competition-us-tevas-generic-launch).
+
+```
+
+```{r, echo=F, fig.width=8, fig.height=4, eval=F}
+# top_10_gross_spending_2023_2 <- top_10_gross_spending %>% 
+#   mutate(prop_incr_spending_21_23 = (Tot_Spndng_2023-Tot_Spndng_2021)/Tot_Spndng_2021*100,
+#           Brnd_Name = fct_reorder(Brnd_Name, Tot_Spndng_2023),
+#          Label = paste0(round(prop_incr_spending_21_23, 0),"%")
+#          )
+# 
+# ggplot(top_10_gross_spending_2023_2, aes(x = Brnd_Name, y = prop_incr_spending_21_23)) +
+#   geom_col(width = 0.6, fill = "#E69F00") +
+#   labs(x = NULL, y = "% Change", title = "Figure 4. Percentage Change in Gross Spending from 2021-2023", subtitle = "Among Top 10 Drugs",
+#        caption = "*Selected among list of 10 drugs for first cycle of negotiation\n**Selected among list of 15 drugs for second cycle of negotiation") +
+#   theme_minimal(base_size = 12,
+#              paper = "white") +
+#   theme(
+#     legend.position = "none",
+#     panel.grid.major.x = element_blank(),
+#     panel.grid.minor.x = element_blank(),
+#     panel.grid.minor.y = element_blank(),
+#     plot.caption = element_text(hjust = 0)
+#   ) +
+#   scale_y_continuous(limits = c(-50, 300)) + 
+#   geom_text(aes(label = Label),
+#              position = position_dodge(width = 0.6),
+#             vjust = ifelse(top_10_gross_spending_2023_2$Brnd_Name == "Revlimid", 1.2, -1), 
+#             size = 3.5, color = "#777777") +
+#   geom_hline(yintercept = 0, color = "black") +
+#   scale_x_discrete(labels = label_wrap(10)) # Wraps x-axis text
+
+```
+
+
+```{r, echo=F, fig.width=8, fig.height=4, eval=F}
+# ### Many of the Top 10 drugs were selected as part of the Inflation Reduction Act negotiations
+# In August 2023, the Centers for Medicare and Medicaid Services (CMS) published the list of the 10 drugs selected for negotiation, whose new prices will take effect on [January 1, 2026](https://www.cms.gov/newsroom/press-releases/hhs-announces-15-additional-drugs-selected-medicare-drug-price-negotiations-continued-effort-lower). They include:
+# 
+# * Drugs identified in **Figure 3**: Eliquis, Jardiance, Januvia, and Farxiga (T2D) and Xarelto (blood clots)  (indicated with an asterisk (*))
+# * Entresto (heart failure)
+# * Enbrel (rheumatoid arthritis, psoriasis, and psoriatic arthritis)
+# * Imbruvica (cancer)
+# * Stelara (plaque psoriasis, psoriatic arthritis, Crohn's disease and ulcerative colitis)
+# * NovoLog/Fiasp (Type 1 and 2 diabetes)
+# 
+# In January 2025, CMS selected [15 additional drugs](https://www.cms.gov/newsroom/press-releases/hhs-announces-15-additional-drugs-selected-medicare-drug-price-negotiations-continued-effort-lower) for negotiation, a list that notably included T2D drug Ozempic, and COPD drug Trelegy Ellipta (indicated with a double asterisk [**] in **Figure 3**).
+# 
+# Gross spending on the 10 drugs selected for negotiation totaled $54.2B in 2023. Spending by each drug is shown in **Figure 5**.
+
+# first_10_gross_spending_1 <- data1 %>% 
+#   filter(Brnd_Name %in% c("Eliquis", "Jardiance", "Xarelto", "Januvia", "Farxiga", "Entresto", "Enbrel", "Imbruvica", "Stelara*")) %>%
+#   mutate(Brnd_Name = str_remove(Brnd_Name,"\\*")) %>%
+#   select(Brnd_Name, Tot_Spndng_2021, Tot_Spndng_2022, Tot_Spndng_2023)
+# 
+# first_10_gross_spending_2 <- data1 %>%
+#   filter((str_detect(Brnd_Name, "Fiasp|Novolog") & !str_detect(Brnd_Name, "Inpen|Pumpcart"))) %>%
+#   summarise(Brnd_Name = "NovoLog/Fiasp*", 
+#             Tot_Spndng_2021 = sum(Tot_Spndng_2021, na.rm = T),
+#             Tot_Spndng_2022 = sum(Tot_Spndng_2022, na.rm = T),
+#             Tot_Spndng_2023 = sum(Tot_Spndng_2023, na.rm = T)
+#             ) 
+# 
+# first_10_gross_spending <- bind_rows(first_10_gross_spending_1, first_10_gross_spending_2) %>%
+#   mutate_at(vars(starts_with("Tot_Spndng")), ~ ./1000000000) %>% 
+#   mutate(Brnd_Name = fct_reorder(Brnd_Name, Tot_Spndng_2023),
+#          Label = paste0("$", round(Tot_Spndng_2023,1), "B"))
+# 
+# #sum(first_10_gross_spending$Tot_Spndng_2023)
+# 
+# ggplot(first_10_gross_spending, aes(x = Brnd_Name, y = Tot_Spndng_2023)) +
+#   geom_col(width = 0.6, fill = "#0072B2") +
+#   labs(x = NULL, y = "Gross Spending ($B)", title = "Figure 5. First Cycle Negotiation Drugs by Gross Spending in 2023", caption = "*Aggregated for Novolog, Novolog Flexpen, Novolog Mix 70-30, Novolog Mix 70-30 Flexpen, Novolog Penfill, Fiasp, \n Fiasp Flextouch and Fiasp Penfill.") +
+#   theme_minimal(base_size = 12,
+#              paper = "white") +
+#   theme(
+#     legend.position = "none",
+#     panel.grid.major.x = element_blank(),
+#     panel.grid.minor.x = element_blank(),
+#     panel.grid.minor.y = element_blank(),
+#     plot.caption = element_text(hjust = 0)
+#   ) +
+#   scale_y_continuous(limits = c(0, 20), breaks = c(seq(2, 20, 2))) + 
+#   geom_text(aes(label = Label),
+#              position = position_dodge(width = 0.6),
+#             vjust = -1, size = 3.5, color = "#777777") +
+#   geom_hline(yintercept = 0, color = "black") +
+#   scale_x_discrete(labels = label_wrap(10)) # Wraps x-axis text
+
+```
+
+
+
+```{r, echo=F, fig.width=8, fig.height=4, eval=FALSE}
+
+# ## Paxlovid Spending
+# 
+# ### From 2021 to 2023, the drug with the largest relative increase in spending was Paxlovid (EUA)
+# Paxlovid was first approved for emergency use in [December 2021](https://labeling.pfizer.com/ShowLabeling.aspx?id=17109) for COVID-19 with high risk of progression. In November 2023, Paxlovid was formally approved by the FDA under a New Drug Application (NDA). Emergency Use Authorization (EUA)-Paxlovid was available in the U.S. until March 8, 2024, after which only NDA-labeled Paxlovid would be authorized for treatment of patients with COVID-19 ([source](https://www.fda.gov/drugs/drug-safety-and-availability/fda-revises-letter-authorization-emergency-use-authorization-paxlovid)).
+# 
+# Figure 6 shows total Medicare Part D spending for Paxlovid (EUA) and Paxlovid from 2021 to 2023. The trends in spending follow the FDA's policy changes during the COVID-19 pandemic. Although more recent data is not yet available, we can expect a decline in Paxlovid (EUA) spending and a subsequent increase in NDA-labeled Paxlovid spending in 2024 to present.
+
+# paxlovid_spending <- data1 %>% 
+#   filter(str_detect(Brnd_Name, "Paxlovid")) %>%
+#   select(Brnd_Name, Tot_Spndng_2021, Tot_Spndng_2022, Tot_Spndng_2023) %>%
+#   pivot_longer(cols = c("Tot_Spndng_2021", "Tot_Spndng_2022", "Tot_Spndng_2023"),
+#                names_to = "Metric", values_to = "Value") %>%
+#   mutate(Value = ifelse(is.na(Value), 0, Value/1000000),
+#          Value_clean = ifelse(Value < 1 & Value > 0, Value*1000000, Value),
+#          Label = ifelse(Value < 1, paste0("$", round(Value_clean, 1)), paste0("$", round(Value_clean, 1), "M")),
+#          Metric = substr(Metric, 12, 16)) %>%
+#   rename(Name = Brnd_Name)
+# 
+# ggplot(paxlovid_spending, aes(x = Metric, y = Value, fill = Name)) +
+#     geom_col(position = "dodge", width = 0.6) +
+#   #facet_wrap(~Metric, scales = "free_x") +
+#   #scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
+#   scale_fill_manual(values = c("Paxlovid (Eua)" = "#0072B2", "Paxlovid" = "#E69F00")) +
+#   labs(x = NULL, y = "Gross Spending ($M)", title = "Figure 6. Gross Spending for Paxlovid from 2021-2023") +
+#   theme_minimal(base_size = 12,
+#              paper = "white") +
+#   theme(
+#     #legend.position = "none",
+#     panel.grid.major.x = element_blank(),
+#     panel.grid.minor.x = element_blank(),
+#     panel.grid.minor.y = element_blank(),
+#   ) +
+#   scale_y_continuous(expand = expansion(mult = c(0, 0.1)),
+#                      limits = c(0, 30)) +
+#   # scale_y_continuous(limits = c(0, 20), breaks = c(seq(2, 20, 2))) + 
+#   geom_text(aes(label = Label),
+#              position = position_dodge(width = 0.6),
+#             vjust = -1, size = 3.5, color = "#777777") +
+#   geom_hline(yintercept = 0, color = "black") +
+#   scale_x_discrete(labels = label_wrap(10)) # Wraps x-axis text
+```
+
+
+```{r, echo=F, results=F, eval=F}
+# top_10_fastest_growing_drugs <- data1 %>% mutate(prop_incr_spending_21_23 = (Tot_Spndng_2023-Tot_Spndng_2021)/Tot_Spndng_2021*100,
+#                                                  prop_incr_spending_19_23 = (Tot_Spndng_2023-Tot_Spndng_2019)/Tot_Spndng_2019*100) %>% arrange(desc(prop_incr_spending_21_23)) %>% #slice(1:10) %>%
+#   select(Brnd_Name, Tot_Spndng_2021, Tot_Spndng_2022, Tot_Spndng_2023, prop_incr_spending_21_23, prop_incr_spending_19_23)
+# 
+# top_10_fastest_growing_drugs
+```
+
+
+```{r, echo=F, results=F, eval=F}
+# top_10_fastest_growing_drugs_raw <- data1 %>% mutate(change_spending_21_23 = (Tot_Spndng_2023-Tot_Spndng_2021)) %>% arrange(desc(change_spending_21_23)) %>% slice(1:10) %>%
+#   select(Brnd_Name, Tot_Spndng_2021, Tot_Spndng_2023, change_spending_21_23) %>%
+#   mutate(prop_incr_spending_21_23 = (Tot_Spndng_2023-Tot_Spndng_2021)/Tot_Spndng_2021*100)
+# 
+# top_10_fastest_growing_drugs_raw
+```
+
